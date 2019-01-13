@@ -34,7 +34,15 @@ def load_vgg(sess, vgg_path):
     vgg_layer4_out_tensor_name = 'layer4_out:0'
     vgg_layer7_out_tensor_name = 'layer7_out:0'
     
-    return None, None, None, None, None
+    model = tf.saved_model.loader.load(sess, [vgg_tag], vgg_path)
+    graph = tf.get_default_graph()
+    w1 = graph.get_tensor_by_name(vgg_input_tensor_name)
+    keep = graph.get_tensor_by_name(vgg_keep_prob_tensor_name)
+    layer3 = graph.get_tensor_by_name(vgg_layer3_out_tensor_name)
+    layer4 = graph.get_tensor_by_name(vgg_layer4_out_tensor_name)
+    layer7 = graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
+    
+    return w1, keep, layer3, layer4, layer7
 tests.test_load_vgg(load_vgg, tf)
 
 
@@ -48,7 +56,34 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    return None
+    # layer 7
+    conv_1x1_layer7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, padding='same',
+                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
+                                        name="conv_1x1_layer7")
+    upsample_layer7 = tf.layers.conv2d_transpose(conv_1x1_layer7, num_classes, 4, 2, padding='same',
+                                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
+                                                    name="upsample_layer7")
+    
+    # layer 4
+    conv_1x1_layer4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding='same',
+                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
+                                        name="conv_1x1_layer4")
+    skip1 = tf.add(conv_1x1_layer4 , conv_1x1_layer7, name="skip1")
+    upsample_layer4 = tf.layers.conv2d_transpose(conv_1x1_layer4, num_classes, 4, 2, padding='same',
+                                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
+                                                    name="upsample_layer4")
+    
+    # layer 3
+    conv_1x1_layer4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding='same',
+                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
+                                        name="conv_1x1_layer4")
+    skip2 = tf.add(conv_1x1_layer4 , conv_1x1_layer4, name="skip2")
+    upsample_layer4 = tf.layers.conv2d_transpose(conv_1x1_layer4, num_classes, 16, 8, padding='same',
+                                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
+                                                    name="upsample_layer4")
+    
+    return output
+
 tests.test_layers(layers)
 
 
