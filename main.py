@@ -6,7 +6,6 @@ import warnings
 from distutils.version import LooseVersion
 import project_tests as tests
 
-
 # Check TensorFlow Version
 assert LooseVersion(tf.__version__) >= LooseVersion('1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
 print('TensorFlow Version: {}'.format(tf.__version__))
@@ -74,15 +73,15 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                     name="upsample_layer4")
     
     # layer 3
-    conv_1x1_layer4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding='same',
+    conv_1x1_layer3 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding='same',
                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
-                                        name="conv_1x1_layer4")
-    skip2 = tf.add(conv_1x1_layer4 , conv_1x1_layer4, name="skip2")
-    upsample_layer4 = tf.layers.conv2d_transpose(conv_1x1_layer4, num_classes, 16, 8, padding='same',
+                                        name="conv_1x1_layer3")
+    skip2 = tf.add(conv_1x1_layer3, conv_1x1_layer4, name="skip2")
+    upsample_layer3 = tf.layers.conv2d_transpose(conv_1x1_layer3, num_classes, 16, 8, padding='same',
                                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3), 
-                                                    name="upsample_layer4")
+                                                    name="upsample_layer3")
     
-    return output
+    return upsample_layer3
 
 tests.test_layers(layers)
 
@@ -97,7 +96,12 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
     # TODO: Implement function
-    return None, None, None
+    logits = tf.reshape(nn_last_layer, (-1, num_classes))
+    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    
+    train_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cross_entropy_loss)
+   
+    return logits, train_op, cross_entropy_loss
 tests.test_optimize(optimize)
 
 
@@ -117,11 +121,32 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     # TODO: Implement function
-    pass
+    sess.run(tf.global_variables_initializer())
+    
+    for epoch in range(epochs):
+        print("Epoch: %d" % epoch)
+        total_training_loss = 0
+        total_training_sample_size = 0
+            
+        for images, labels in get_batches_fn(batch_size):
+            # Run optimization op (backprop) and cost op (to get loss value)
+            _, c = sess.run([train_op, cross_entropy_loss], 
+                            feed_dict={
+                                input_image: images,
+                                correct_label: labels,
+                                keep_prob: 0.5,
+                                learning_rate: 0.0001
+                            })
+            total_training_sample_size += len(labels)
+            total_training_loss /= total_training_sample_size
+            print("Total loss: %3f" % total_training_loss)
+            
 tests.test_train_nn(train_nn)
 
 
 def run():
+    epochs = 2
+    batch_size = 24
     num_classes = 2
     image_shape = (160, 576)  # KITTI dataset uses 160x576 images
     data_dir = './data'
@@ -145,8 +170,12 @@ def run():
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # TODO: Build NN using load_vgg, layers, and optimize function
+        w1, keep, layer3, layer4, layer7 = load_vgg(sess, vgg_path)
+        model = layers(layer3, layer4, layer7, num_classes)
 
         # TODO: Train NN using the train_nn function
+        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
+             correct_label, keep_prob, learning_rate)
 
         # TODO: Save inference data using helper.save_inference_samples
         #  helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
